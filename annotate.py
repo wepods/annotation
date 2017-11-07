@@ -154,8 +154,8 @@ def load_each_image(image_idx, image_paths, total_number_of_images):
     image_with_help[:image.shape[0],:,:] = image.copy()
     number_part_of_image = int(re.findall(r"\d+",image_name_no_extension)[0])
     _ = cv2.putText(image_with_help, "image: {}".format(number_part_of_image), (5, image.shape[0]+25), cv2.FONT_HERSHEY_SIMPLEX, .5, (255,255,255), 1, cv2.LINE_AA, bottomLeftOrigin=False)
-    _ = cv2.putText(image_with_help, "(1: car (blue), 2: pedestrian(green), 3:bike(red)), (r: remove), (z: zoom, h: home), ".format(number_part_of_image), (5, image.shape[0]+55), cv2.FONT_HERSHEY_SIMPLEX, .5, (255,255,255), 1, cv2.LINE_AA, bottomLeftOrigin=False)
-    _ = cv2.putText(image_with_help, "(->:forward, <-:backward), (space bar: play/pause), (s: skip image), (q/Esc: exit)".format(number_part_of_image), (5, image.shape[0]+85), cv2.FONT_HERSHEY_SIMPLEX, .5, (255,255,255), 1, cv2.LINE_AA, bottomLeftOrigin=False)
+    _ = cv2.putText(image_with_help, "(1: car (blue), 2: pedestrian(green), 3:cyclist(red)), (r: remove), (z: zoom, h: home), ".format(number_part_of_image), (5, image.shape[0]+55), cv2.FONT_HERSHEY_SIMPLEX, .5, (255,255,255), 1, cv2.LINE_AA, bottomLeftOrigin=False)
+    _ = cv2.putText(image_with_help, "(n or ->:next, p or <-:previous), (space bar: play/pause), (s: skip image), (q/Esc: exit)".format(number_part_of_image), (5, image.shape[0]+85), cv2.FONT_HERSHEY_SIMPLEX, .5, (255,255,255), 1, cv2.LINE_AA, bottomLeftOrigin=False)
     image = image_with_help.copy()
 
     image_clean = image.copy()
@@ -284,163 +284,171 @@ else:
     cv2.moveWindow('image',50,50)
 
 cv2.setMouseCallback('image',draw_rectangle_callback)
-while True:
-    if is_play == True:
-        is_zoomed, is_home, used_roi, drawing, draw_during_zoom = reset_booleans()
-        image_idx += 1
-        image, image_idx, image_name_no_extension, image_height, image_width, image_orig, image_clean = load_each_image(image_idx, image_paths, total_number_of_images)
-        detections = load_detections(label_dir, image_name_no_extension)
-        draw_rectangle(image, detections, class_ids)
-        k = cv2.waitKey(66) & 0xFF
-    else:
-        draw_rectangle(image, detections, class_ids)
-        k = cv2.waitKey(0) & 0xFF
 
-
-    if k == ord('z') and drawing == False and used_roi == False and is_zoomed == False:
-        print('zoomed')
-        is_zoomed = True
-        is_home = False
-        used_roi = True
-
-        if abs(ix2-ix1) == 0:
-            print("Region width is zero. Automatically 100 pixel is added to the region.")
-            ix2 = ix1 + 100
-        if abs(iy2-iy1) == 0:
-            print("Region width is zero. Automatically 100 pixel is added to the region.")
-            iy2 = iy1 + 100
-        dx = ix2-ix1;dy = iy2-iy1
-        if dy<dx:
-            resized_width = image_width
-            resized_height = int(float(dy)/dx* resized_width)
-        else:
-            resized_height = image_height
-            resized_width = int(float(dx)/dy* resized_height)
-
-        image = image_orig.copy()
-        image = image[iy1:iy2,ix1:ix2]
-        image = cv2.resize(image,(resized_width,resized_height),interpolation=cv2.INTER_NEAREST)
-        image_clean = image.copy()
-        roi = (ix1,iy1,ix2,iy2)
-        resized_roi_size = (resized_width, resized_height)
-        if len(detections):
-            detections[:,1:] = zoom_coordinates(detections[:,1:], roi, resized_roi_size)
-        print("drawing: {}, used_roi: {}, is_zoomed: {}, is_home: {}".format(drawing, used_roi, is_zoomed, is_home))
-
-
-    if k == ord('h') and drawing == False and is_home == False:
-        print('home')
-        is_zoomed = False
-        used_roi = True
-        is_home = True
-        print drawing, used_roi
-        image = image_orig.copy()
-        image_clean = image.copy()
-        if len(detections):
-            detections[:,1:] = correct_zoom_coordinates(detections[:,1:], roi, resized_roi_size)
-        print("drawing: {}, used_roi: {}, is_home: {}".format(drawing, used_roi, is_home))
-
-    if k == ord('1') and drawing == False and used_roi == False:
-        print('add car')
-        used_roi = True
-        print drawing, used_roi
-        detections = add_detection(detections, [1,ix1,iy1,ix2,iy2])
-    if k == ord('2') and drawing == False and used_roi == False:
-        print('add pedestrian')
-        used_roi = True
-        detections = add_detection(detections, [2,ix1,iy1,ix2,iy2])
-    if k == ord('3') and drawing == False and used_roi == False:
-        print('add bike')
-        used_roi = True
-        detections = add_detection(detections, [3,ix1,iy1,ix2,iy2])
-
-    if k == ord('r') and drawing == False:
-        print('remove region')
-        used_roi = True
-        # https://stackoverflow.com/questions/15522336/text-input-in-tkinter
-        root = Tkinter.Tk()
-        region_idx = tkSimpleDialog.askstring("Remove region", "enter region number to remove")
-        root.destroy()
-        try:
-            region_idx = int(region_idx)
-            # accidentally enter negative value
-            region_idx *= np.sign(region_idx)
-        except:
-            region_idx = -1
-        total_number_of_regions = detections.shape[0]
-        if len(detections) and region_idx > -1 and region_idx < total_number_of_regions:
-            detections = np.delete(detections,(region_idx),axis=0)
-            print detections
-            image = image_clean.copy()
-        else:
-            print("Please provide region number, which you want to remove.")
-
-    if (k == ord('s')) and drawing == False:
-        used_roi = True
-        # https://stackoverflow.com/questions/15522336/text-input-in-tkinter
-        root = Tkinter.Tk()
-        skip_number = tkSimpleDialog.askstring("Skip images", "enter a number of images to skip")
-        root.destroy()
-        try:
-            skip_number = int(skip_number)
-        except:
-            skip_number = 0
-        print("skip {} images".format(skip_number))
-        image_idx += skip_number
-        image, image_idx, image_name_no_extension, image_height, image_width, image_orig, image_clean = load_each_image(image_idx, image_paths, total_number_of_images)
-        detections = load_detections(label_dir, image_name_no_extension)
-
-    if (k == 82 or k == 83) and drawing == False: # 82: top arrow, 83: right arrow
-        print('next image')
-        if is_zoomed == True:
-            is_zoomed, is_home, used_roi, drawing, draw_during_zoom = reset_booleans()
-            if len(detections):
-                detections[:,1:] = correct_zoom_coordinates(detections[:,1:], roi, resized_roi_size)
-
-        filename = os.path.join(save_dir, '{}.txt'.format(image_name_no_extension) )
-        if len(detections):
-            save_detections(filename, detections)
-        if not len(detections) and os.path.isfile(filename):
-            os.remove(filename)
-
-        image_idx += 1
-        image, image_idx, image_name_no_extension, image_height, image_width, image_orig, image_clean = load_each_image(image_idx, image_paths, total_number_of_images)
-        detections = load_detections(label_dir, image_name_no_extension)
-
-    if (k == 81 or k == 84) and drawing == False: # 81: left arrow, 83: down arrow:
-        print('previous image')
-        if is_zoomed == True:
-            is_zoomed, is_home, is_play, used_roi, drawing, draw_during_zoom = reset_booleans()
-            if len(detections):
-                detections[:,1:] = correct_zoom_coordinates(detections[:,1:], roi, resized_roi_size)
-
-        filename = os.path.join(save_dir, '{}.txt'.format(image_name_no_extension) )
-        if len(detections):
-            save_detections(filename, detections)
-        if not len(detections) and os.path.isfile(filename):
-            os.remove(filename)
-
-        image_idx -= 1
-        image, image_idx, image_name_no_extension, image_height, image_width, image_orig, image_clean = load_each_image(image_idx, image_paths, total_number_of_images)
-        detections = load_detections(label_dir, image_name_no_extension)
-
-
-    if (k == 32) and drawing == False: # 32 is space bar
+try:
+    while True:
         if is_play == True:
-            print("play movie")
+            is_zoomed, is_home, used_roi, drawing, draw_during_zoom = reset_booleans()
+            image_idx += 1
+            image, image_idx, image_name_no_extension, image_height, image_width, image_orig, image_clean = load_each_image(image_idx, image_paths, total_number_of_images)
+            detections = load_detections(label_dir, image_name_no_extension)
+            draw_rectangle(image, detections, class_ids)
+            k = cv2.waitKey(66) & 0xFF
         else:
-            print("pause movie")
-        is_play = not is_play
+            draw_rectangle(image, detections, class_ids)
+            k = cv2.waitKey(0) & 0xFF
 
-    if (k == ord('q') or k == 27):
-        filename = os.path.join(save_dir, '{}.txt'.format(image_name_no_extension) )
-        if len(detections):
-            save_detections(filename, detections)
-        if not len(detections) and os.path.isfile(filename):
-            os.remove(filename)
-        cv2.destroyAllWindows()
 
-        with open(meta_data_file,'w') as mdf:
-            meta_data['starting_image'] = image_idx+1
-            yaml.dump(meta_data, mdf, default_flow_style=False)
-        break
+        if k == ord('z') and drawing == False and used_roi == False and is_zoomed == False:
+            print('zoomed')
+            is_zoomed = True
+            is_home = False
+            used_roi = True
+
+            if abs(ix2-ix1) == 0:
+                print("Region width is zero. Automatically 100 pixel is added to the region.")
+                ix2 = ix1 + 100
+            if abs(iy2-iy1) == 0:
+                print("Region width is zero. Automatically 100 pixel is added to the region.")
+                iy2 = iy1 + 100
+            dx = ix2-ix1;dy = iy2-iy1
+            if dy<dx:
+                resized_width = image_width
+                resized_height = int(float(dy)/dx* resized_width)
+            else:
+                resized_height = image_height
+                resized_width = int(float(dx)/dy* resized_height)
+
+            image = image_orig.copy()
+            image = image[iy1:iy2,ix1:ix2]
+            image = cv2.resize(image,(resized_width,resized_height),interpolation=cv2.INTER_NEAREST)
+            image_clean = image.copy()
+            roi = (ix1,iy1,ix2,iy2)
+            resized_roi_size = (resized_width, resized_height)
+            if len(detections):
+                detections[:,1:] = zoom_coordinates(detections[:,1:], roi, resized_roi_size)
+            print("drawing: {}, used_roi: {}, is_zoomed: {}, is_home: {}".format(drawing, used_roi, is_zoomed, is_home))
+
+
+        if k == ord('h') and drawing == False and is_home == False:
+            print('home')
+            is_zoomed = False
+            used_roi = True
+            is_home = True
+            print drawing, used_roi
+            image = image_orig.copy()
+            image_clean = image.copy()
+            if len(detections):
+                detections[:,1:] = correct_zoom_coordinates(detections[:,1:], roi, resized_roi_size)
+            print("drawing: {}, used_roi: {}, is_home: {}".format(drawing, used_roi, is_home))
+
+        if k == ord('1') and drawing == False and used_roi == False:
+            print('add car')
+            used_roi = True
+            print drawing, used_roi
+            detections = add_detection(detections, [1,ix1,iy1,ix2,iy2])
+        if k == ord('2') and drawing == False and used_roi == False:
+            print('add pedestrian')
+            used_roi = True
+            detections = add_detection(detections, [2,ix1,iy1,ix2,iy2])
+        if k == ord('3') and drawing == False and used_roi == False:
+            print('add bike')
+            used_roi = True
+            detections = add_detection(detections, [3,ix1,iy1,ix2,iy2])
+
+        if k == ord('r') and drawing == False:
+            print('remove region')
+            used_roi = True
+            # https://stackoverflow.com/questions/15522336/text-input-in-tkinter
+            root = Tkinter.Tk()
+            region_idx = tkSimpleDialog.askstring("Remove region", "enter region number to remove")
+            root.destroy()
+            try:
+                region_idx = int(region_idx)
+                # accidentally enter negative value
+                region_idx *= np.sign(region_idx)
+            except:
+                region_idx = -1
+            total_number_of_regions = detections.shape[0]
+            if len(detections) and region_idx > -1 and region_idx < total_number_of_regions:
+                detections = np.delete(detections,(region_idx),axis=0)
+                print detections
+                image = image_clean.copy()
+            else:
+                print("Please provide region number, which you want to remove.")
+
+        if (k == ord('s')) and drawing == False:
+            used_roi = True
+            # https://stackoverflow.com/questions/15522336/text-input-in-tkinter
+            root = Tkinter.Tk()
+            skip_number = tkSimpleDialog.askstring("Skip images", "enter a number of images to skip")
+            root.destroy()
+            try:
+                skip_number = int(skip_number)
+            except:
+                skip_number = 0
+            print("skip {} images".format(skip_number))
+            image_idx += skip_number
+            image, image_idx, image_name_no_extension, image_height, image_width, image_orig, image_clean = load_each_image(image_idx, image_paths, total_number_of_images)
+            detections = load_detections(label_dir, image_name_no_extension)
+
+        if (k == ord('n') or k == 82 or k == 83) and drawing == False: # 82: top arrow, 83: right arrow
+            print('next image')
+            if is_zoomed == True:
+                is_zoomed, is_home, used_roi, drawing, draw_during_zoom = reset_booleans()
+                if len(detections):
+                    detections[:,1:] = correct_zoom_coordinates(detections[:,1:], roi, resized_roi_size)
+
+            filename = os.path.join(save_dir, '{}.txt'.format(image_name_no_extension) )
+            if len(detections):
+                save_detections(filename, detections)
+            if not len(detections) and os.path.isfile(filename):
+                os.remove(filename)
+
+            image_idx += 1
+            image, image_idx, image_name_no_extension, image_height, image_width, image_orig, image_clean = load_each_image(image_idx, image_paths, total_number_of_images)
+            detections = load_detections(label_dir, image_name_no_extension)
+
+
+        if (k == ord('p') or k == 81 or k == 84) and drawing == False: # 81: left arrow, 83: down arrow:
+            print('previous image')
+            if is_zoomed == True:
+                is_zoomed, is_home, is_play, used_roi, drawing, draw_during_zoom = reset_booleans()
+                if len(detections):
+                    detections[:,1:] = correct_zoom_coordinates(detections[:,1:], roi, resized_roi_size)
+
+            filename = os.path.join(save_dir, '{}.txt'.format(image_name_no_extension) )
+            if len(detections):
+                save_detections(filename, detections)
+            if not len(detections) and os.path.isfile(filename):
+                os.remove(filename)
+
+            image_idx -= 1
+            image, image_idx, image_name_no_extension, image_height, image_width, image_orig, image_clean = load_each_image(image_idx, image_paths, total_number_of_images)
+            detections = load_detections(label_dir, image_name_no_extension)
+
+
+        if (k == 32) and drawing == False: # 32 is space bar
+            if is_play == True:
+                print("play movie")
+            else:
+                print("pause movie")
+            is_play = not is_play
+
+        if (k == ord('q') or k == 27):
+            filename = os.path.join(save_dir, '{}.txt'.format(image_name_no_extension) )
+            if len(detections):
+                save_detections(filename, detections)
+            if not len(detections) and os.path.isfile(filename):
+                os.remove(filename)
+            cv2.destroyAllWindows()
+
+            with open(meta_data_file,'w') as mdf:
+                meta_data['starting_image'] = image_idx+1
+                yaml.dump(meta_data, mdf, default_flow_style=False)
+            break
+except:
+    cv2.destroyAllWindows()
+    with open(meta_data_file,'w') as mdf:
+        meta_data['starting_image'] = image_idx+1
+        yaml.dump(meta_data, mdf, default_flow_style=False)
