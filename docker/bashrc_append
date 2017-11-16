@@ -1,0 +1,6 @@
+#### histsync_import should be run
+#shopt -s histappend
+HISTSIZE=10000 # increase to store more history
+HISTFILESIZE=200000 # increase to store more history
+export PROMPT_COMMAND="history -a; $PROMPT_COMMAND" # write history to file after each cmd
+histsync_import() { history -a; history -c; history -r; } # reload history from file
